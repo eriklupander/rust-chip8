@@ -2,6 +2,8 @@
 
 A really simple CHIP8 emulator/interpreter written in Rust. Built using Tobias V. Langhoffs excellent guide: https://tobiasvl.github.io/blog/write-a-chip-8-emulator/
 
+![spaceinvaders](images/spaceinvaders.png)
+
 Uses Pixels and Winit for window and drawing to a texture.
 
 Key handling is slightly inexact, uses key_held rather than keeping a local state of press/release.
@@ -21,3 +23,14 @@ I chose to make the implementation multi-threaded with the interpreter running a
 Using the Atomic reference counter and Mutex constructs turned out to be a really cool way to assert correctness. While I used `sync.Mutex` in the Go implementation, that was because I knew that I should do that - not because the compiler forced me to. (Though Go's race checker loudly complains!).
  
 Also, using `match (instruction, X, Y, N)` including wildcards rather than nested `switch` statements was really nice improvement compared to the Go version.
+
+## Gallery
+
+#### IBM "hello world" Logo
+![IBM](images/ibm.png)
+#### opcode_test.ch8
+![IBM](images/opcodes_test.png)
+#### skosulor c8_test
+![IBM](images/skosulor_c8int.png)
+#### Pong
+![IBM](images/pong.png)

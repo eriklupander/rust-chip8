@@ -57,8 +57,10 @@ fn main() {
     thread::spawn(move||{
         // load ROM
         //let data = fs::read("./roms/IBM logo.ch8").expect("Unable to read file");
+        //let data = fs::read("./roms/test_opcode.ch8").expect("Unable to read file");
         //let data = fs::read("./roms/c8_test.c8").expect("Unable to read file");
-        let data = fs::read("./roms/pong.ch8").expect("Unable to read file");
+        //let data = fs::read("./roms/pong.ch8").expect("Unable to read file");
+        let data = fs::read("./roms/spaceinvaders.ch8").expect("Unable to read file");
 
         // Init emulator with rom data
         let mut emul = initEmulator(data);
@@ -193,8 +195,10 @@ impl Emulator {
         // match the instruction
         match (instr, X, Y, N)  {
             // 0x00E0 Clear screen
-            (0x0, 0x0, 0xE, 0x0) => println!("clear screen"),
-
+            (0x0, 0x0, 0xE, 0x0) => {
+                pixels.lock().unwrap().get_frame_mut().iter_mut().
+                    for_each(|x| *x = 0x0);
+            }
             // 0x00EE Pop stack
             (0x0, 0x0 ,0xE, 0xE) => {
                 self.pc = self.stack[self.stackFrame as usize]; // remember - this is actually the "parent" stack frame
@@ -492,7 +496,7 @@ fn keyCode(x: u8) -> VirtualKeyCode {
 
         match x {
         0x0  => VirtualKeyCode::Key0,
-        0x1 => VirtualKeyCode::Key1,
+        0x1  => VirtualKeyCode::Key1,
         0x2  => VirtualKeyCode::Key2,
         0x3  => VirtualKeyCode::Key3,
         0x4  => VirtualKeyCode::Key4,
@@ -507,7 +511,7 @@ fn keyCode(x: u8) -> VirtualKeyCode {
         0xD  => VirtualKeyCode::D,
         0xE  => VirtualKeyCode::E,
         0xF  => VirtualKeyCode::F,
-        _ => VirtualKeyCode::Escape,
+        _    => VirtualKeyCode::Escape,
     }
 }
 
