@@ -1,21 +1,21 @@
 #![allow(dead_code, non_snake_case)]
 
-use std::rc::Rc;
+
 use std::sync::{Mutex, Arc};
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use std::{fs, thread, time};
-use pixels::{Error, Pixels, SurfaceTexture};
-use rand::rngs::ThreadRng;
+use pixels::{Pixels, SurfaceTexture};
+
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
 const MEM_OFFSET: i32 = 0x200;
 const FONT_OFFSET: u16 = 0x50;
 
-const MIN_DURATION: u128 = 1400; // approx. 1/700th of a second
+const MIN_DURATION: u128 = 1000; // Langhoffs guide recommends 700 ops/s, but I think that's on the slow side.
        
 const FORCE_COSMAC_VIP: bool = false;
 
@@ -25,7 +25,7 @@ fn main() {
     
     // Init window / pixels
     let event_loop = EventLoop::new();
-    let mut input = WinitInputHelper::new();
+    
     let window = {
         let size = LogicalSize::new(640 as f64, 320 as f64);
         WindowBuilder::new()
@@ -44,8 +44,13 @@ fn main() {
 
     // set up shared ownership constructs for the "pixels" data.
     let screen = Arc::new(Mutex::new(pixels));
-    let clone1 = Arc::clone(&screen);
-    let clone2 = Arc::clone(&screen);
+    let screenClone1 = Arc::clone(&screen);
+    let screenClone2 = Arc::clone(&screen);
+
+    let input = WinitInputHelper::new();
+    let inputArc = Arc::new(Mutex::new(input));
+    let inputClone1 = Arc::clone(&inputArc);
+    let inputClone2 = Arc::clone(&inputArc);
 
     // Run the interpreter in a dedicated thread. Each "tick" of the event loop will process
     // a single instruction and, if necessary, updated the "pixels" data.
@@ -67,11 +72,11 @@ fn main() {
 
             // Let emulator process one instruction
             {
-                emul.run(&clone1);
+                emul.run(&screenClone1, &inputClone1);
             }
             
-            // update timers each time more than 16 ms (16000 microseconds) have passed    
-            if timer.elapsed().as_micros() > 16500 {
+            // update timers each time more than 16.6 ms (16666 microseconds) have passed, i.e. 60hz   
+            if timer.elapsed().as_micros() > 16666 {
                 if emul.delayTimer > 0 {
                     emul.delayTimer -= 1;
                 }
@@ -92,9 +97,21 @@ fn main() {
     // Let the winit event-loop handle screen redraws.
     event_loop.run(move |event, _, _control_flow| {
        
+        // Handle keystrokes including exit through ESC or clicking (x)
+        {
+            let mut keyStrokes = inputClone2.lock().unwrap();
+            if keyStrokes.update(&event) {
+                if keyStrokes.key_pressed(VirtualKeyCode::Escape) || keyStrokes.quit(){
+                    println!("Exit requested");
+                    _control_flow.set_exit();
+                    return;
+                }
+            }
+        }
+        
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            clone2.lock().unwrap().render().expect("do not fail");
+            screenClone2.lock().unwrap().render().expect("do not fail");
 
              // We must tell the window to redraw. 
             window.request_redraw();
@@ -152,7 +169,7 @@ struct Emulator {
 impl Emulator {
 
     // run runs a single CHP8 instruction.
-    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>){
+    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>, input: &Arc<Mutex<WinitInputHelper>>){
 
         // parse next instruction from memory, using the pc (program counter) value.
         let b = ((self.memory[self.pc as usize] as u16) << 8) | self.memory[self.pc as usize + 1] as u16;
@@ -376,14 +393,14 @@ impl Emulator {
 
             // EX9E: handle key pressed
             (0xE, _, 0x9, 0xE) => {
-                let keyPressed = false; // TODO fix
+                let keyPressed = input.lock().unwrap().key_held(keyCode(self.registers[X]));
                 if keyPressed {
                     self.pc += 2;
                 }
             }
             // EXA1: handle key not pressed
             (0xE, _, 0xA, 0x1) => {
-                let keyPressed = true;  // TODO fix
+                let keyPressed = input.lock().unwrap().key_held(keyCode(self.registers[X]));
                 if !keyPressed {
                     self.pc += 2;
                 }
@@ -468,6 +485,29 @@ impl Emulator {
             (_instr, _X, _Y, _N) =>  println!("catch all!"),
         }
     
+    }
+}
+
+fn keyCode(x: u8) -> VirtualKeyCode {
+
+        match x {
+        0x0  => VirtualKeyCode::Key0,
+        0x1 => VirtualKeyCode::Key1,
+        0x2  => VirtualKeyCode::Key2,
+        0x3  => VirtualKeyCode::Key3,
+        0x4  => VirtualKeyCode::Key4,
+        0x5  => VirtualKeyCode::Key5,
+        0x6  => VirtualKeyCode::Key6,
+        0x7  => VirtualKeyCode::Key7,
+        0x8  => VirtualKeyCode::Key8,
+        0x9  => VirtualKeyCode::Key9,
+        0xA  => VirtualKeyCode::A,
+        0xB  => VirtualKeyCode::B,
+        0xC  => VirtualKeyCode::C,
+        0xD  => VirtualKeyCode::D,
+        0xE  => VirtualKeyCode::E,
+        0xF  => VirtualKeyCode::F,
+        _ => VirtualKeyCode::Escape,
     }
 }
 
