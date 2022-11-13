@@ -47,6 +47,8 @@ fn main() {
     let clone1 = Arc::clone(&screen);
     let clone2 = Arc::clone(&screen);
 
+    // Run the interpreter in a dedicated thread. Each "tick" of the event loop will process
+    // a single instruction and, if necessary, updated the "pixels" data.
     thread::spawn(move||{
         // load ROM
         //let data = fs::read("./roms/IBM logo.ch8").expect("Unable to read file");
@@ -87,8 +89,7 @@ fn main() {
     
     });
 
-    // Let the winit event-loop "drive" the emulator. Each "tick" of the event loop will process
-    // a single instruction and redraw the screen.
+    // Let the winit event-loop handle screen redraws.
     event_loop.run(move |event, _, _control_flow| {
        
         // Draw the current frame
