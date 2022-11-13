@@ -8,9 +8,13 @@ Uses Pixels and Winit for window and drawing to a texture.
 
 Key handling is slightly inexact, uses key_held rather than keeping a local state of press/release.
 
-TODO:
+#### TODO:
 * Sound playback
- 
+
+#### Issues:
+* Space invaders glitches after hitting a monster or two. Could be a COSMAC "quirk" that needs adressing.
+* The interpreter (still) runs at a bit varying speed, especially when holding down keys.
+
 ### Technical description
 I recently implemented a CHIP8 interpreter in Go (https://github.com/eriklupander/go-chip8) so I sort-of ported that code over to Rust as a learning excerise. Naturally, that means this is my very first Rust code ever and should be read as such!
 
@@ -22,7 +26,7 @@ I chose to make the implementation multi-threaded with the interpreter running a
 
 Using the Atomic reference counter and Mutex constructs turned out to be a really cool way to assert correctness. While I used `sync.Mutex` in the Go implementation, that was because I knew that I should do that - not because the compiler forced me to. (Though Go's race checker loudly complains!).
  
-Also, using `match (instruction, X, Y, N)` including wildcards rather than nested `switch` statements was really nice improvement compared to the Go version.
+Also, using `match (instruction, X, Y, N)` including wildcards rather than nested `switch` statements was a really nice improvement compared to the Go version.
 
 ## Gallery
 
