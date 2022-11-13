@@ -15,8 +15,8 @@ use winit_input_helper::WinitInputHelper;
 const MEM_OFFSET: i32 = 0x200;
 const FONT_OFFSET: u16 = 0x50;
 
-const ONE_MILLIS: Duration = time::Duration::from_millis(1);
-
+const MIN_DURATION: u128 = 1400; // approx. 1/700th of a second
+       
 const FORCE_COSMAC_VIP: bool = false;
 
 fn main() {
@@ -42,6 +42,7 @@ fn main() {
         Pixels::new(64, 32, surface_texture)
     }.unwrap();
 
+    // set up shared ownership constructs for the "pixels" data.
     let screen = Arc::new(Mutex::new(pixels));
     let clone1 = Arc::clone(&screen);
     let clone2 = Arc::clone(&screen);
@@ -54,38 +55,34 @@ fn main() {
 
         // Init emulator with rom data
         let mut emul = initEmulator(data);
-        let sleepFor = time::Duration::from_micros(5);
-
-        let mut start = Instant::now();
-
-        let minDuration: u128 = 1400; // approx. 1/700th of a second
-        
+       
+        // timer is used for updating delayTimer and soundTimer every time approx. 1/60th second has elapsed.
+        let mut timer = Instant::now();
+ 
         loop {
+            // keeps track of how many microseconds this instruction took, so we can pace the interpreter.
             let throttle = Instant::now();
+
             // Let emulator process one instruction
             {
                 emul.run(&clone1);
             }
             
-        
-            // update timers each time more than 16 ms (16000 microseconds) have passed
-          
-            if start.elapsed().as_micros() > 16500 {
+            // update timers each time more than 16 ms (16000 microseconds) have passed    
+            if timer.elapsed().as_micros() > 16500 {
                 if emul.delayTimer > 0 {
                     emul.delayTimer -= 1;
                 }
                 if emul.soundTimer > 0 {
                     emul.soundTimer -= 1;
                 }
-                start = Instant::now();
+                timer = Instant::now();
             }
 
-            if throttle.elapsed().as_micros() < minDuration {
-                thread::sleep(time::Duration::from_micros((minDuration - throttle.elapsed().as_micros()) as u64 ));
-            }
-
-            // artificially slow down interpreter.
-            
+            // artificially slow down interpreter to run at approx 700 instructions per second
+            if throttle.elapsed().as_micros() < MIN_DURATION {
+                thread::sleep(time::Duration::from_micros((MIN_DURATION - throttle.elapsed().as_micros()) as u64 ));
+            } 
         }
     
     });
@@ -153,7 +150,8 @@ struct Emulator {
 
 impl Emulator {
 
-    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>){//pixels: &mut[u8]) {
+    // run runs a single CHP8 instruction.
+    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>){
 
         // parse next instruction from memory, using the pc (program counter) value.
         let b = ((self.memory[self.pc as usize] as u16) << 8) | self.memory[self.pc as usize + 1] as u16;
@@ -488,5 +486,5 @@ static FONT: [u8; 80] = [
     0xF0, 0x80, 0x80, 0x80, 0xF0, // C
     0xE0, 0x90, 0x90, 0x90, 0xE0, // D
     0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80,
-]; // F
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
