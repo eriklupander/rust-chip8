@@ -1,6 +1,7 @@
 #![allow(dead_code, non_snake_case)]
 
 
+use std::collections::HashMap;
 use std::sync::{Mutex, Arc};
 use std::time::{Instant};
 use std::{fs, thread, time};
@@ -17,7 +18,7 @@ const FONT_OFFSET: u16 = 0x50;
 
 const MIN_DURATION: u128 = 1000; // Langhoffs guide recommends 700 ops/s, but I think that's on the slow side.
        
-const FORCE_COSMAC_VIP: bool = false;
+const FORCE_COSMAC_VIP: bool = true;
 
 fn main() {
 
@@ -49,8 +50,17 @@ fn main() {
 
     let input = WinitInputHelper::new();
     let inputArc = Arc::new(Mutex::new(input));
-    let inputClone1 = Arc::clone(&inputArc);
-    let inputClone2 = Arc::clone(&inputArc);
+    let inputClone = Arc::clone(&inputArc);
+
+    let mut keysPressed: HashMap<VirtualKeyCode, bool> = HashMap::new();
+    for key in KEYS {
+        keysPressed.insert(key, false); 
+    }
+
+    let keysArc = Arc::new(Mutex::new(keysPressed));
+    let keysClone1 = Arc::clone(&keysArc);
+    let keysClone2 = Arc::clone(&keysArc);
+
 
     // Run the interpreter in a dedicated thread. Each "tick" of the event loop will process
     // a single instruction and, if necessary, updated the "pixels" data.
@@ -74,7 +84,7 @@ fn main() {
 
             // Let emulator process one instruction
             {
-                emul.run(&screenClone1, &inputClone1);
+                emul.run(&screenClone1, &keysClone2);
             }
             
             // update timers each time more than 16.6 ms (16666 microseconds) have passed, i.e. 60hz   
@@ -93,7 +103,6 @@ fn main() {
                 thread::sleep(time::Duration::from_micros((MIN_DURATION - throttle.elapsed().as_micros()) as u64 ));
             } 
         }
-    
     });
 
     // Let the winit event-loop handle screen redraws.
@@ -101,12 +110,22 @@ fn main() {
        
         // Handle keystrokes including exit through ESC or clicking (x)
         {
-            let mut keyStrokes = inputClone2.lock().unwrap();
+            let mut keyStrokes = inputClone.lock().unwrap();
             if keyStrokes.update(&event) {
                 if keyStrokes.key_pressed(VirtualKeyCode::Escape) || keyStrokes.quit(){
                     println!("Exit requested");
                     _control_flow.set_exit();
                     return;
+                }
+
+                // When a keystore has been registered, update state of ALL known keys.
+                for key in KEYS {
+                    if keyStrokes.key_pressed(key) {
+                        keysClone1.lock().unwrap().insert(key, true);
+                    }
+                    if keyStrokes.key_released(key) {
+                        keysClone1.lock().unwrap().insert(key, false);
+                    }
                 }
             }
         }
@@ -171,7 +190,7 @@ struct Emulator {
 impl Emulator {
 
     // run runs a single CHP8 instruction.
-    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>, input: &Arc<Mutex<WinitInputHelper>>){
+    fn run(&mut self, pixels: &Arc<Mutex<Pixels>>, keys: &Arc<Mutex<HashMap<VirtualKeyCode, bool>>>) {//input: &Arc<Mutex<WinitInputHelper>>){
 
         // parse next instruction from memory, using the pc (program counter) value.
         let b = ((self.memory[self.pc as usize] as u16) << 8) | self.memory[self.pc as usize + 1] as u16;
@@ -372,22 +391,23 @@ impl Emulator {
                     for bit in 0..8 {
                         let col: u16 = (xCoord + bit).into();
                         if spriteByte&(1<<(7-bit)) > 0 {
-
-                            let index = (row*64+col)*4;
+                            
+                            let index = ((row*64+col)*4) % 8192;
                             let mut handle = pixels.lock().unwrap();
                             let px = handle.get_frame_mut();
+                            
                             let isSet = px[index as usize] == 0xFF;
                             if isSet {
                                 px[index as usize] = 0x0;
-                                px[index as usize +1] = 0x0;
-                                px[index as usize +2] = 0x0;
-                                px[index as usize+ 3] = 0xff;
+                                px[index as usize + 1] = 0x0;
+                                px[index as usize + 2] = 0x0;
+                                px[index as usize + 3] = 0xff;
                                 self.registers[0xF] = 0x1
                             } else {
                                 px[index as usize] = 0xFF;
-                                px[index as usize +1] = 0xFF;
-                                px[index as usize +2] = 0xFF;
-                                px[index as usize+ 3] = 0xff;
+                                px[index as usize + 1] = 0xFF;
+                                px[index as usize + 2] = 0xFF;
+                                px[index as usize + 3] = 0xff;
                             }
                         }
                     }
@@ -397,14 +417,20 @@ impl Emulator {
 
             // EX9E: handle key pressed
             (0xE, _, 0x9, 0xE) => {
-                let keyPressed = input.lock().unwrap().key_held(keyCode(self.registers[X]));
+
+                let k = keyCode(self.registers[X]);
+
+                let keyPressed = keys.lock().unwrap()[&k];
                 if keyPressed {
                     self.pc += 2;
                 }
             }
             // EXA1: handle key not pressed
             (0xE, _, 0xA, 0x1) => {
-                let keyPressed = input.lock().unwrap().key_held(keyCode(self.registers[X]));
+
+                let k = keyCode(self.registers[X]);
+
+                let keyPressed = keys.lock().unwrap()[&k];
                 if !keyPressed {
                     self.pc += 2;
                 }
@@ -514,6 +540,25 @@ fn keyCode(x: u8) -> VirtualKeyCode {
         _    => VirtualKeyCode::Escape,
     }
 }
+
+static KEYS: [VirtualKeyCode;16] = [
+    VirtualKeyCode::Key0,
+    VirtualKeyCode::Key1,
+    VirtualKeyCode::Key2,
+    VirtualKeyCode::Key3,
+    VirtualKeyCode::Key4,
+    VirtualKeyCode::Key5,
+    VirtualKeyCode::Key6,
+    VirtualKeyCode::Key7,
+    VirtualKeyCode::Key8,
+    VirtualKeyCode::Key9,
+    VirtualKeyCode::A,
+    VirtualKeyCode::B,
+    VirtualKeyCode::C,
+    VirtualKeyCode::D,
+    VirtualKeyCode::E,
+    VirtualKeyCode::F,
+];
 
 static FONT: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
